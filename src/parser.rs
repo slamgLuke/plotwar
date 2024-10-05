@@ -4,7 +4,8 @@
 // EXP = TERM | TERM (('+' | '-') TERM)*                // left associative
 // TERM = POWER | POWER (('*' | '/') POWER)*            // left associative
 // POWER = FACTOR | FACTOR ('^' FACTOR)*                // left associative
-// FACTOR = '-' FACTOR | '|' EXP '|' | 'l' '(' EXP ')' | '(' EXP ')' | NUM | 'x'
+// FACTOR = '-' FACTOR | '|' EXP '|' | FUNC '(' EXP ')' | '(' EXP ')' | NUM | 'x'
+// FUNC = 'l' | 's' | 'c'
 
 // Tokens and Operators
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,8 @@ enum Op {
     Abs,
     Exp,
     Ln,
+    Sin,
+    Cos,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +108,26 @@ impl Parser {
                 }
                 Ok(Exp::UnExp(UnOp::Ln, Box::new(exp)))
             }
+            Some(Token::Op(Op::Sin)) => {
+                if self.next() != Some(Token::LParen) {
+                    return Err("Expected '(' after 'sin'".to_string());
+                }
+                let exp = self.parse_exp()?;
+                if self.next() != Some(Token::RParen) {
+                    return Err("Expected closing ')' after 'sin'".to_string());
+                }
+                Ok(Exp::UnExp(UnOp::Sin, Box::new(exp)))
+            }
+            Some(Token::Op(Op::Cos)) => {
+                if self.next() != Some(Token::LParen) {
+                    return Err("Expected '(' after 'cos'".to_string());
+                }
+                let exp = self.parse_exp()?;
+                if self.next() != Some(Token::RParen) {
+                    return Err("Expected closing ')' after 'cos'".to_string());
+                }
+                Ok(Exp::UnExp(UnOp::Cos, Box::new(exp)))
+            }
             Some(Token::LParen) => {
                 let exp = self.parse_exp()?;
                 if self.next() != Some(Token::RParen) {
@@ -173,9 +196,11 @@ fn tokenize(input: &[char]) -> Result<Vec<Token>, String> {
             '(' => tokens.push(Token::LParen),
             ')' => tokens.push(Token::RParen),
             'x' | 'X' => tokens.push(Token::X),
-            'e' => tokens.push(Token::Num(std::f64::consts::E)),
-            'p' => tokens.push(Token::Num(std::f64::consts::PI)),
-            'l' => tokens.push(Token::Op(Op::Ln)),
+            'e' | 'E' => tokens.push(Token::Num(std::f64::consts::E)),
+            'p' | 'P' => tokens.push(Token::Num(std::f64::consts::PI)),
+            'l' | 'L' => tokens.push(Token::Op(Op::Ln)),
+            's' | 'S' => tokens.push(Token::Op(Op::Sin)),
+            'c' | 'C' => tokens.push(Token::Op(Op::Cos)),
             _ => {
                 if c.is_digit(10) || c == '.' {
                     num.push(c);
@@ -235,6 +260,8 @@ enum UnOp {
     Neg,
     Abs,
     Ln,
+    Sin,
+    Cos,
 }
 
 impl BinOp {
@@ -266,6 +293,8 @@ impl UnOp {
             Op::Minus => UnOp::Neg,
             Op::Abs => UnOp::Abs,
             Op::Ln => UnOp::Ln,
+            Op::Sin => UnOp::Sin,
+            Op::Cos => UnOp::Cos,
             _ => panic!("Unexpected operator"),
         }
     }
@@ -275,12 +304,16 @@ impl UnOp {
             UnOp::Neg => -operand,
             UnOp::Abs => operand.abs(),
             UnOp::Ln => operand.ln(),
+            UnOp::Sin => operand.sin(),
+            UnOp::Cos => operand.cos(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::f64::consts::PI;
+
     use super::*;
 
     fn into_input(input: &str) -> Vec<char> {
@@ -353,5 +386,26 @@ mod tests {
         let exp = parser.parse().unwrap();
         dbg!(exp.clone());
         assert_approx_eq(&exp, 4.0, 0.0, TOL);
+    }
+
+    #[test]
+    fn trigonometric() {
+        let input = into_input("s(0) + c(0) + s(0) * c(0)");
+        let mut parser = Parser::from_chars(&input).unwrap();
+        let exp = parser.parse().unwrap();
+        dbg!(exp.clone());
+        assert_approx_eq(&exp, 0.0, 1.0, TOL);
+
+        let input = into_input("s(0) * s(0) + c(0) * c(0)");
+        let mut parser = Parser::from_chars(&input).unwrap();
+        let exp = parser.parse().unwrap();
+        dbg!(exp.clone());
+        assert_approx_eq(&exp, 0.0, 1.0, TOL);
+
+        let input = into_input("s(x)");
+        let mut parser = Parser::from_chars(&input).unwrap();
+        let exp = parser.parse().unwrap();
+        dbg!(exp.clone());
+        assert_approx_eq(&exp, 5.0*PI/2.0, 1.0, TOL);
     }
 }
